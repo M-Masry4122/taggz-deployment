@@ -1,13 +1,9 @@
 import cv2
 import numpy as np
 import os
-import torch
 import time
-from torchvision import transforms
-from PIL import Image
 from scipy.spatial.distance import cosine
 from insightface.app import FaceAnalysis
-import warnings
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple, Optional, Dict
 import logging
