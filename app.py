@@ -71,22 +71,19 @@ def numpy_to_json_serializable(obj):
 def build_database():
     """
     Build or rebuild the face database for a specific event
-    Input: Event path (full path to event directory)
+    Input: Event name
     Output: Status message
     """
     try:
         data = request.json
-        if not data or "event_path" not in data:
-            return jsonify({"error": "Event path is required"}), 400
+        if not data or "event_name" not in data:
+            return jsonify({"error": "Event name is required"}), 400
 
-        event_path = data["event_path"]
+        event_name = secure_filename(data["event_name"])
+        event_path = os.path.join(app.config["EVENTS_FOLDER"], event_name)
 
-        # Validate that the path exists
-        if not os.path.exists(event_path) or not os.path.isdir(event_path):
-            return (
-                jsonify([]),
-                404,
-            )
+        if not os.path.exists(event_path):
+            return jsonify({"error": f"Event {event_name} does not exist"}), 404
 
         # Build the database (this will also delete the old one if it exists)
         start_time = time.time()
@@ -104,7 +101,7 @@ def build_database():
         return jsonify(
             {
                 "status": "success",
-                "message": f"Face database for event at {event_path} built successfully",
+                "message": f"Face database for event {event_name} built successfully",
                 "time_taken": f"{end_time - start_time:.2f} seconds",
                 "poor_quality_images": poor_quality_images,
                 "no_face_images": no_face_images,
@@ -120,45 +117,47 @@ def build_database():
 def compare_faces():
     """
     Compare a profile picture with photos from an event
-    Input: Profile picture path (full path) and event path (full path)
+    Input: Profile picture path and event name
     Output: List of paths of matched photos
     """
     try:
         data = request.json
-        if not data or "profile_picture_path" not in data or "event_path" not in data:
+        if not data or "profile_picture" not in data or "event_name" not in data:
             return (
-                jsonify({"error": "Profile picture path and event path are required"}),
+                jsonify({"error": "Profile picture and event name are required"}),
                 400,
             )
 
-        profile_picture_path = data["profile_picture_path"]
-        event_path = data["event_path"]
+        profile_picture = data["profile_picture"]
+        event_name = secure_filename(data["event_name"])
 
-        # Validate paths
-        if not os.path.exists(profile_picture_path) or not os.path.isfile(
-            profile_picture_path
-        ):
-            return jsonify({"error": "Profile picture not found or is not a file"}), 404
-
-        if not os.path.exists(event_path) or not os.path.isdir(event_path):
-            return (
-                jsonify({"error": f"Event path does not exist or is not a directory"}),
-                404,
+        # Validate profile picture path
+        if not profile_picture.startswith(app.config["PROFILE_PICTURES_FOLDER"]):
+            profile_picture = os.path.join(
+                app.config["PROFILE_PICTURES_FOLDER"], profile_picture
             )
+
+        if not os.path.exists(profile_picture):
+            return jsonify({"error": "Profile picture not found"}), 404
+
+        # Validate event path
+        event_path = os.path.join(app.config["EVENTS_FOLDER"], event_name)
+        if not os.path.exists(event_path):
+            return jsonify({"error": f"Event {event_name} does not exist"}), 404
 
         # Load the face database for the event
         start_time = time.time()
         database = face_recognition.load_face_database(event_path, cache=True)
 
         # Check profile picture for faces
-        faces = face_recognition.extract_faces(profile_picture_path)
+        faces = face_recognition.extract_faces(profile_picture)
         if not faces:
             return (
                 jsonify(
                     {
                         "status": "error",
                         "error": "No face detected in profile picture",
-                        "profile_picture": os.path.basename(profile_picture_path),
+                        "profile_picture": os.path.basename(profile_picture),
                     }
                 ),
                 400,
@@ -166,20 +165,28 @@ def compare_faces():
 
         # Find matching faces
         matches = face_recognition.find_matching_faces(
-            query_image_path=profile_picture_path,
+            query_image_path=profile_picture,
             face_database=database,
             top_k=int(data.get("max_results", 500)),
         )
         end_time = time.time()
 
-        # Format the results
+        # Format the results, converting numpy arrays to regular Python types for JSON serialization
         results = []
         for match in matches:
             match_dict = {
-                "image_path": match.image_path,  # This will be a full path
+                "image_path": match.image_path,
                 "confidence": float(match.confidence),
             }
             results.append(match_dict)
+
+        # Print results in separate lines
+        for result in results:
+            print(result)
+
+        print(
+            f"match_count: {len(results)}, time_taken: {end_time - start_time:.2f} seconds"
+        )
 
         # Get lists of problematic images
         poor_quality_images = [
@@ -209,7 +216,7 @@ def compare_faces():
 def upload_profile_picture():
     """
     Upload a profile picture for a user
-    Input: user_id, profile picture file, and optional destination_path
+    Input: user_id and profile picture file
     Output: Path to the uploaded profile picture
     """
     try:
@@ -235,17 +242,9 @@ def upload_profile_picture():
 
         user_id = secure_filename(request.form["user_id"])
 
-        # Use custom destination path if provided, otherwise use default
-        destination_path = request.form.get(
-            "destination_path", app.config["PROFILE_PICTURES_FOLDER"]
-        )
-
-        # Ensure the directory exists
-        os.makedirs(destination_path, exist_ok=True)
-
         # Save the file with user_id as filename
         filename = f"{user_id}.jpg"
-        file_path = os.path.join(destination_path, filename)
+        file_path = os.path.join(app.config["PROFILE_PICTURES_FOLDER"], filename)
         file.save(file_path)
 
         # Check for faces and quality
@@ -334,25 +333,28 @@ def upload_event_photos():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/get_photo", methods=["POST"])
-def get_photo():
+@app.route("/get_photo/<path:filename>")
+def get_photo(filename):
     """
     Serve a photo file
-    Input: Full file path
+    Input: File path
     Output: The requested image file
     """
     try:
-        data = request.json
-        if not data or "file_path" not in data:
-            return jsonify({"error": "File path is required"}), 400
-
-        file_path = data["file_path"]
-
-        if not os.path.exists(file_path) or not os.path.isfile(file_path):
-            return jsonify({"error": "File not found or is not a file"}), 404
-
-        directory = os.path.dirname(file_path)
-        filename = os.path.basename(file_path)
+        # Determine if the file is a profile picture or an event photo
+        if filename.startswith("profile_pictures/"):
+            directory = os.path.join(
+                app.config["UPLOAD_FOLDER"], os.path.dirname(filename)
+            )
+            filename = os.path.basename(filename)
+        elif filename.startswith("events/"):
+            parts = filename.split("/", 2)
+            if len(parts) < 3:
+                return jsonify({"error": "Invalid file path"}), 400
+            directory = os.path.join(app.config["UPLOAD_FOLDER"], parts[0], parts[1])
+            filename = parts[2]
+        else:
+            return jsonify({"error": "Invalid file path"}), 400
 
         return send_from_directory(directory, filename)
 
@@ -361,42 +363,38 @@ def get_photo():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/quality_issues", methods=["POST"])
-def quality_issues():
+@app.route("/quality_issues/<event_name>", methods=["GET"])
+def quality_issues(event_name):
     """
     Get a list of images with quality issues for a specific event
-    Input: Event path (full path)
+    Input: Event name
     Output: Lists of problematic images
     """
     try:
-        data = request.json
-        if not data or "event_path" not in data:
-            return jsonify({"error": "Event path is required"}), 400
+        event_name = secure_filename(event_name)
+        event_path = os.path.join(app.config["EVENTS_FOLDER"], event_name)
 
-        event_path = data["event_path"]
-
-        if not os.path.exists(event_path) or not os.path.isdir(event_path):
-            return (
-                jsonify({"error": f"Event path does not exist or is not a directory"}),
-                404,
-            )
+        if not os.path.exists(event_path):
+            return jsonify({"error": f"Event {event_name} does not exist"}), 404
 
         # Load the database to run quality checks
         database = face_recognition.load_face_database(event_path, cache=True)
 
         # Get lists of problematic images
         poor_quality_images = [
-            img
+            os.path.basename(img)
             for img in face_recognition.poor_quality_images
-            if img.startswith(event_path)
+            if event_name in img
         ]
         no_face_images = [
-            img for img in face_recognition.no_face_images if img.startswith(event_path)
+            os.path.basename(img)
+            for img in face_recognition.no_face_images
+            if event_name in img
         ]
 
         return jsonify(
             {
-                "event_path": event_path,
+                "event": event_name,
                 "poor_quality_images": poor_quality_images,
                 "no_face_images": no_face_images,
                 "total_problematic": len(poor_quality_images) + len(no_face_images),
