@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Configuration
-app.config["UPLOAD_FOLDER"] = "uploads"
+app.config["UPLOAD_FOLDER"] = "/var/www/html/public_html/storage/app/public/"
 app.config["PROFILE_PICTURES_FOLDER"] = os.path.join(
-    app.config["UPLOAD_FOLDER"], "profile_pictures"
+    app.config["UPLOAD_FOLDER"], "user/"
 )
 app.config["EVENTS_FOLDER"] = os.path.join(app.config["UPLOAD_FOLDER"], "events")
 app.config["CACHE_FOLDER"] = os.path.join(app.config["UPLOAD_FOLDER"], "cache")
