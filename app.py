@@ -20,7 +20,7 @@ app.config["UPLOAD_FOLDER"] = "/var/www/html/public_html/storage/app/public/"
 app.config["PROFILE_PICTURES_FOLDER"] = os.path.join(
     app.config["UPLOAD_FOLDER"], "user/"
 )
-app.config["EVENTS_FOLDER"] = os.path.join(app.config["UPLOAD_FOLDER"], "events")
+app.config["EVENTS_FOLDER"] = os.path.join(app.config["UPLOAD_FOLDER"], "event_photos")
 app.config["CACHE_FOLDER"] = os.path.join(app.config["UPLOAD_FOLDER"], "cache")
 app.config["ALLOWED_EXTENSIONS"] = {"png", "jpg", "jpeg"}
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB max upload size
