@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # Configuration
-app.config["UPLOAD_FOLDER"] = "/var/www/html/public_html/storage/app/public/"
+# app.config["UPLOAD_FOLDER"] = "uploads/"  # For local development
+app.config["UPLOAD_FOLDER"] = "/var/www/html/public_html/storage/app/public/"  # For production
 app.config["PROFILE_PICTURES_FOLDER"] = os.path.join(
     app.config["UPLOAD_FOLDER"], "user/"
 )
