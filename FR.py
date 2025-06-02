@@ -325,11 +325,11 @@ class EnhancedFaceRecognition:
             try:
                 if event_name:
                     url = f"https://admin.taggz.app/api/send-notification/{event_name}"
-                    payload = {"no_uploaded": len(database)}
+                    payload = {"no_uploaded": len(new_database)}
                     response = requests.post(url, json=payload)
                     if response.status_code == 200:
                         logger.info(
-                            f"Successfully sent notification for {len(database)} uploaded images"
+                            f"Successfully sent notification for {len(new_database)} uploaded images"
                         )
                     else:
                         logger.error(
