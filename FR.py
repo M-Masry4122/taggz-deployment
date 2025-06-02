@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import os
 import time
+import requests
 from scipy.spatial.distance import cosine
 from insightface.app import FaceAnalysis
 from concurrent.futures import ThreadPoolExecutor
@@ -292,6 +293,9 @@ class EnhancedFaceRecognition:
         # Get cache path
         cache_file = self.get_cache_path(image_folder)
 
+        # Extract the event name from the image folder
+        event_name = os.path.basename(str(image_folder))
+
         # Create a temporary cache file name
         if cache_file:
             temp_cache_file = cache_file.with_suffix(".pkl.tmp")
@@ -311,11 +315,28 @@ class EnhancedFaceRecognition:
                 logger.info(
                     f"Successfully updated cache for {os.path.basename(os.path.normpath(str(image_folder)))}"
                 )
+
             except Exception as e:
                 logger.error(f"Error updating cache: {str(e)}")
                 # Clean up temporary file if it exists
                 if temp_cache_file.exists():
                     temp_cache_file.unlink()
+
+            try:
+                if event_name:
+                    url = f"https://admin.taggz.app/api/send-notification/{event_name}"
+                    payload = {"no_uploaded": len(database)}
+                    response = requests.post(url, json=payload)
+                    if response.status_code == 200:
+                        logger.info(
+                            f"Successfully sent notification for {len(database)} uploaded images"
+                        )
+                    else:
+                        logger.error(
+                            f"Failed to send notification: {response.status_code}"
+                        )
+            except Exception as e:
+                logger.error(f"Error sending notification: {str(e)}")
         else:
             # If no cache directory is specified, just load the database
             new_database = self.load_face_database(image_folder, cache=False)
@@ -412,7 +433,6 @@ class EnhancedFaceRecognition:
         # Send notification when database is successfully rebuilt
         if not cache or not cache_file or not cache_file.exists():
             try:
-                import requests
 
                 event_id = getattr(self, "event_id", None)
                 if event_id:
